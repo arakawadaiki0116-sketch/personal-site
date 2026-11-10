@@ -15,15 +15,9 @@
       <p class="week-range"><span id="weekStart"></span><span class="tilde">〜</span><span id="weekEnd"></span></p>
     </header>
 
-    <section aria-labelledby="h-week">
-      <h2 id="h-week" class="visually-hidden">対象週</h2>
-      <div class="week-controls">
-        <div class="segmented" role="group" aria-label="対象週">
-          <button type="button" id="thisWeek" aria-pressed="false">今週</button>
-          <button type="button" id="nextWeek" aria-pressed="false">来週</button>
-        </div>
-        <input type="date" id="datePicker" aria-label="日付から週を選ぶ">
-      </div>
+    <section id="calendarSection" aria-labelledby="h-cal" hidden>
+      <h2 id="h-cal">予定</h2>
+      <iframe id="calendar" title="Googleカレンダー（来週）"></iframe>
     </section>
 
     <section aria-labelledby="h-days">
@@ -35,25 +29,18 @@
       </label>
     </section>
 
-    <section aria-labelledby="h-cal">
-      <h2 id="h-cal">予定</h2>
-      <div id="calendarBox">
-        <iframe id="calendar" title="Googleカレンダー（対象週）"></iframe>
-        <p class="note">予定が出ないときは、このブラウザで Google にログインしているか確かめてください。</p>
-      </div>
-      <details id="calendarSettings">
-        <summary>カレンダーの設定</summary>
-        <label class="field">
-          <span>カレンダーID（ふつうは自分の Gmail アドレス）</span>
-          <input type="email" id="calendarId" placeholder="example@gmail.com" autocomplete="email">
-        </label>
-      </details>
+    <section aria-labelledby="h-text">
+      <h2 id="h-text">メッセージ</h2>
+      <textarea id="preview" rows="12" readonly aria-labelledby="h-text"></textarea>
     </section>
 
-    <section aria-labelledby="h-text">
-      <h2 id="h-text">文面</h2>
-      <textarea id="preview" rows="12" readonly aria-describedby="h-text"></textarea>
-    </section>
+    <details id="calendarSettings" class="settings">
+      <summary>カレンダーの設定</summary>
+      <label class="field">
+        <span>カレンダーID（ふつうは自分の Gmail アドレス）</span>
+        <input type="email" id="calendarId" placeholder="example@gmail.com" autocomplete="email">
+      </label>
+    </details>
   </main>
 
   <div class="send-bar">
