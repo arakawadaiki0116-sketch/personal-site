@@ -13,6 +13,7 @@
     return {
       weekStart: toISO(sundayOf(new Date())),
       limit: 5,
+      calendarId: '',
       days: DAY_NAMES.map(function (_, i) {
         return { off: i === 6, start: starts[i], end: '22:00' };
       })
@@ -46,6 +47,7 @@
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return s;
       var saved = JSON.parse(raw);
+      if (typeof saved.calendarId === 'string') s.calendarId = saved.calendarId.trim();
       if (fromISO(saved.weekStart)) s.weekStart = toISO(sundayOf(fromISO(saved.weekStart)));
       var lim = parseInt(saved.limit, 10);
       if (lim >= 1 && lim <= 7) s.limit = lim;
@@ -63,8 +65,10 @@
   function validTime(t) {
     return TIME_OPTIONS.some(function (m) { return fmtTime(m) === t; });
   }
+  // 入力が変わるたびに呼ぶ：保存して、文面を作り直す
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* 保存不可でも動作は続ける */ }
+    updatePreview();
   }
 
   var state = load();
@@ -151,7 +155,45 @@
     $('weekStart').textContent = md(sun);
     $('datePicker').value = state.weekStart;
     rows.forEach(function (r, i) { r.date.textContent = md(addDays(sun, i)); });
+    renderCalendar();
   }
+
+  // ---- Googleカレンダー（埋め込み表示。ログイン中のブラウザなら自分の予定が出る） ----
+  var calendarEl = $('calendar');
+  var calendarIdEl = $('calendarId');
+  var lastCalendarUrl = '';
+
+  function compact(d) { return toISO(d).replace(/-/g, ''); }
+
+  function renderCalendar() {
+    var id = state.calendarId;
+    $('calendarBox').hidden = !id;
+    $('calendarSettings').open = !id;
+    if (!id) return;
+    var sun = fromISO(state.weekStart);
+    var narrow = window.matchMedia('(max-width: 600px)').matches;
+    var params = [
+      'src=' + encodeURIComponent(id),
+      'ctz=Asia%2FTokyo',
+      'mode=' + (narrow ? 'AGENDA' : 'WEEK'),
+      'wkst=1',
+      'dates=' + compact(sun) + '%2F' + compact(addDays(sun, 7)),
+      'showTitle=0', 'showPrint=0', 'showCalendars=0', 'showTz=0'
+    ];
+    var url = 'https://calendar.google.com/calendar/embed?' + params.join('&');
+    if (url !== lastCalendarUrl) {
+      lastCalendarUrl = url;
+      calendarEl.src = url;
+    }
+  }
+
+  calendarIdEl.value = state.calendarId;
+  calendarIdEl.addEventListener('change', function () {
+    state.calendarId = calendarIdEl.value.trim();
+    renderCalendar();
+    save();
+  });
+  window.matchMedia('(max-width: 600px)').addEventListener('change', renderCalendar);
 
   $('thisWeek').addEventListener('click', function () { setWeek(new Date()); });
   $('nextWeek').addEventListener('click', function () { setWeek(addDays(new Date(), 7)); });
@@ -172,26 +214,42 @@
     return lines.join('\n');
   }
 
-  $('generate').addEventListener('click', function () {
-    $('preview').value = buildText();
-    $('copyStatus').textContent = '';
-  });
-
-  $('copy').addEventListener('click', function () {
+  function updatePreview() {
     var preview = $('preview');
-    if (!preview.value) preview.value = buildText();
-    var done = function () { $('copyStatus').textContent = 'コピーしました'; };
-    var fallback = function () {
+    if (!preview) return;
+    preview.value = buildText();
+    $('sendStatus').textContent = '';
+  }
+
+  // 「送信」：OS の共有画面を開く。共有画面が使えないブラウザではクリップボードにコピーする
+  function copyFallback(text) {
+    var status = $('sendStatus');
+    var done = function () { status.textContent = 'このブラウザは共有画面に対応していないため、文面をコピーしました。'; };
+    var legacy = function () {
+      var preview = $('preview');
       preview.removeAttribute('readonly');
       preview.select();
-      try { document.execCommand('copy'); done(); }
-      catch (e) { $('copyStatus').textContent = 'コピーできませんでした'; }
+      try { document.execCommand('copy') ? done() : (status.textContent = '共有もコピーもできませんでした。文面を選んでコピーしてください。'); }
+      catch (e) { status.textContent = '共有もコピーもできませんでした。文面を選んでコピーしてください。'; }
       preview.setAttribute('readonly', '');
     };
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(preview.value).then(done, fallback);
+      navigator.clipboard.writeText(text).then(done, legacy);
     } else {
-      fallback();
+      legacy();
+    }
+  }
+
+  $('send').addEventListener('click', function () {
+    var text = buildText();
+    $('sendStatus').textContent = '';
+    if (navigator.share) {
+      navigator.share({ text: text }).catch(function (err) {
+        if (err && err.name === 'AbortError') return; // 共有画面を閉じただけ
+        copyFallback(text);
+      });
+    } else {
+      copyFallback(text);
     }
   });
 

@@ -21,6 +21,21 @@
     </section>
 
     <section class="card">
+      <h2>Googleカレンダー</h2>
+      <div id="calendarBox">
+        <iframe id="calendar" title="Googleカレンダー（対象週）"></iframe>
+        <p class="note">予定が出ないときは、このブラウザで Google にログインしているか確かめてください。</p>
+      </div>
+      <details id="calendarSettings">
+        <summary>カレンダーの設定</summary>
+        <label class="field">
+          カレンダーID（ふつうは自分の Gmail アドレス）
+          <input type="email" id="calendarId" placeholder="例: example@gmail.com" autocomplete="email">
+        </label>
+      </details>
+    </section>
+
+    <section class="card">
       <h2>曜日ごとの希望</h2>
       <div id="days"></div>
     </section>
@@ -34,12 +49,10 @@
     </section>
 
     <section class="card">
-      <button type="button" id="generate" class="primary">文面を作る</button>
-      <textarea id="preview" rows="12" readonly placeholder="「文面を作る」を押すとここに表示されます"></textarea>
-      <div class="copy-row">
-        <button type="button" id="copy">コピー</button>
-        <span id="copyStatus" role="status"></span>
-      </div>
+      <h2>文面（入力に合わせて自動で更新）</h2>
+      <textarea id="preview" rows="12" readonly></textarea>
+      <button type="button" id="send" class="primary">送信</button>
+      <p id="sendStatus" class="status" role="status"></p>
     </section>
   </main>
   <script src="app.js"></script>

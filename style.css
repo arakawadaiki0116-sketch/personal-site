@@ -100,9 +100,31 @@ select:disabled { background: #eceef1; color: #999; }
   flex-wrap: wrap;
 }
 
+#calendar {
+  display: block;
+  width: 100%;
+  height: 520px;
+  border: 1px solid #e0e3e8;
+  border-radius: 8px;
+}
+#calendarBox[hidden] { display: none; }
+.note { margin: 6px 0 0; font-size: 0.85rem; color: #666; }
+
+details { margin-top: 12px; }
+summary { cursor: pointer; min-height: 32px; color: #444; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.field input {
+  font: inherit;
+  font-size: 1rem;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #c8ccd2;
+}
+
 textarea {
   width: 100%;
-  margin-top: 12px;
+  margin-bottom: 12px;
   font: inherit;
   font-size: 1rem;
   padding: 12px;
@@ -111,16 +133,10 @@ textarea {
   resize: vertical;
 }
 
-.copy-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-}
-.copy-row button { min-width: 120px; }
-#copyStatus { color: #0a7d3c; }
+.status { margin: 8px 0 0; color: #0a7d3c; min-height: 1.5em; }
 
 @media (max-width: 420px) {
   .day-row { grid-template-columns: 1fr auto; }
   .times { grid-column: 1 / -1; }
+  #calendar { height: 420px; }
 }
