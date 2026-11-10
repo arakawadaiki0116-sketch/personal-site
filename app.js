@@ -96,29 +96,40 @@
 
     var label = document.createElement('div');
     label.className = 'day-name' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '');
+    var dow = document.createElement('span');
+    dow.className = 'dow';
+    dow.textContent = name;
     var dateSpan = document.createElement('span');
     dateSpan.className = 'date';
+    label.appendChild(dow);
     label.appendChild(dateSpan);
-    label.appendChild(document.createTextNode('(' + name + ')'));
-
-    var offLabel = document.createElement('label');
-    offLabel.className = 'off-label';
-    var off = document.createElement('input');
-    off.type = 'checkbox';
-    offLabel.appendChild(off);
-    offLabel.appendChild(document.createTextNode('不可'));
 
     var times = document.createElement('div');
     times.className = 'times';
     var start = makeTimeSelect(state.days[i].start, name + '曜の開始時刻');
     var end = makeTimeSelect(state.days[i].end, name + '曜の終了時刻');
+    var sep = document.createElement('span');
+    sep.className = 'sep';
+    sep.setAttribute('aria-hidden', 'true');
+    sep.textContent = '–';
     times.appendChild(start);
-    times.appendChild(document.createTextNode('〜'));
+    times.appendChild(sep);
     times.appendChild(end);
 
+    // 「不可」はチェックボックスのまま、見た目だけ押しボタン風にする
+    var offLabel = document.createElement('label');
+    offLabel.className = 'off-toggle';
+    var off = document.createElement('input');
+    off.type = 'checkbox';
+    off.setAttribute('aria-label', name + '曜は不可');
+    var offText = document.createElement('span');
+    offText.textContent = '不可';
+    offLabel.appendChild(off);
+    offLabel.appendChild(offText);
+
     row.appendChild(label);
-    row.appendChild(offLabel);
     row.appendChild(times);
+    row.appendChild(offLabel);
     daysEl.appendChild(row);
 
     off.checked = state.days[i].off;
@@ -153,7 +164,13 @@
   function renderWeek() {
     var sun = fromISO(state.weekStart);
     $('weekStart').textContent = md(sun);
+    $('weekEnd').textContent = md(addDays(sun, 6));
     $('datePicker').value = state.weekStart;
+    // 今週・来週のどちらを選んでいるかをボタンに出す
+    var thisSun = toISO(sundayOf(new Date()));
+    var nextSun = toISO(addDays(sundayOf(new Date()), 7));
+    $('thisWeek').setAttribute('aria-pressed', String(state.weekStart === thisSun));
+    $('nextWeek').setAttribute('aria-pressed', String(state.weekStart === nextSun));
     rows.forEach(function (r, i) { r.date.textContent = md(addDays(sun, i)); });
     renderCalendar();
   }

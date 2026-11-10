@@ -2,26 +2,41 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>シフト希望メモ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17181a" media="(prefers-color-scheme: dark)">
+  <title>シフト希望</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main>
-    <h1>シフト希望メモ</h1>
+    <header class="page-head">
+      <h1>シフト希望</h1>
+      <p class="week-range"><span id="weekStart"></span><span class="tilde">〜</span><span id="weekEnd"></span></p>
+    </header>
 
-    <section class="card">
-      <h2>対象週</h2>
+    <section aria-labelledby="h-week">
+      <h2 id="h-week" class="visually-hidden">対象週</h2>
       <div class="week-controls">
-        <button type="button" id="thisWeek">今週</button>
-        <button type="button" id="nextWeek">来週</button>
-        <input type="date" id="datePicker" aria-label="日付を選んで週を指定">
+        <div class="segmented" role="group" aria-label="対象週">
+          <button type="button" id="thisWeek" aria-pressed="false">今週</button>
+          <button type="button" id="nextWeek" aria-pressed="false">来週</button>
+        </div>
+        <input type="date" id="datePicker" aria-label="日付から週を選ぶ">
       </div>
-      <p class="week-label"><span id="weekStart"></span> 以降の週（日曜始まり）</p>
     </section>
 
-    <section class="card">
-      <h2>Googleカレンダー</h2>
+    <section aria-labelledby="h-days">
+      <h2 id="h-days">希望時間</h2>
+      <div id="days" class="day-list"></div>
+      <label class="limit">
+        <span>週の勤務回数の上限</span>
+        <span class="limit-input"><select id="limit"></select>回</span>
+      </label>
+    </section>
+
+    <section aria-labelledby="h-cal">
+      <h2 id="h-cal">予定</h2>
       <div id="calendarBox">
         <iframe id="calendar" title="Googleカレンダー（対象週）"></iframe>
         <p class="note">予定が出ないときは、このブラウザで Google にログインしているか確かめてください。</p>
@@ -29,32 +44,24 @@
       <details id="calendarSettings">
         <summary>カレンダーの設定</summary>
         <label class="field">
-          カレンダーID（ふつうは自分の Gmail アドレス）
-          <input type="email" id="calendarId" placeholder="例: example@gmail.com" autocomplete="email">
+          <span>カレンダーID（ふつうは自分の Gmail アドレス）</span>
+          <input type="email" id="calendarId" placeholder="example@gmail.com" autocomplete="email">
         </label>
       </details>
     </section>
 
-    <section class="card">
-      <h2>曜日ごとの希望</h2>
-      <div id="days"></div>
-    </section>
-
-    <section class="card">
-      <label class="limit">
-        一週間の勤務回数の上限
-        <select id="limit"></select>
-        回
-      </label>
-    </section>
-
-    <section class="card">
-      <h2>文面（入力に合わせて自動で更新）</h2>
-      <textarea id="preview" rows="12" readonly></textarea>
-      <button type="button" id="send" class="primary">送信</button>
-      <p id="sendStatus" class="status" role="status"></p>
+    <section aria-labelledby="h-text">
+      <h2 id="h-text">文面</h2>
+      <textarea id="preview" rows="12" readonly aria-describedby="h-text"></textarea>
     </section>
   </main>
+
+  <div class="send-bar">
+    <div class="send-inner">
+      <p id="sendStatus" class="status" role="status"></p>
+      <button type="button" id="send" class="primary">送信</button>
+    </div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>
