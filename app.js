@@ -248,7 +248,13 @@
     row.appendChild(offLabel);
     daysEl.appendChild(row);
 
-    rows.push({ row: row, start: start, end: end, off: off });
+    // 予定と重なったときに出す一行（ふだんは隠す）
+    var conflict = document.createElement('p');
+    conflict.className = 'conflict';
+    conflict.hidden = true;
+    row.appendChild(conflict);
+
+    rows.push({ row: row, start: start, end: end, off: off, conflict: conflict });
     start.place();
     end.place();
     applyOff(i);
@@ -477,6 +483,7 @@
         li.appendChild(time);
         li.appendChild(dot);
         li.appendChild(title);
+        it.li = li;
         ul.appendChild(li);
       });
       group.appendChild(ul);
@@ -520,7 +527,7 @@
     renderSettings();
     showMessage('予定を読み込んでいます…');
     fetchWeekEvents()
-      .then(function (events) { renderEvents(eventsByDay(events)); })
+      .then(function (events) { dayEvents = eventsByDay(events); renderEvents(dayEvents); checkConflicts(); })
       .catch(function (e) {
         if (e.login) return; // ログイン画面に戻した
         if (e.setup) showMessage('カレンダーの読み込み先がまだ設定されていません。');
@@ -610,6 +617,43 @@
     if (!preview) return;
     preview.value = buildText();
     $('sendStatus').textContent = '';
+    checkConflicts();
+  }
+
+  // ---- 希望時間と予定の重なり ----
+  // 時刻つきの予定が、その日の希望時間と少しでも重なったら知らせる（終日の予定と「不可」の日は見ない）
+  var dayEvents = null; // 曜日ごとの予定（読み込めたら入る）
+  function minutesOf(label) {
+    var p = label.split(':');
+    return +p[0] * 60 + +p[1];
+  }
+  function checkConflicts() {
+    if (!rows.length) return;
+    var conflictDays = [];
+    rows.forEach(function (r, i) {
+      var d = state.days[i];
+      var hits = [];
+      var items = dayEvents ? dayEvents[i] : [];
+      items.forEach(function (it) { if (it.li) it.li.classList.remove('is-conflict'); });
+      if (dayEvents && !d.off) {
+        var base = addDays(weekStart, i);
+        var s0 = new Date(base.getTime()); s0.setMinutes(minutesOf(d.start));
+        var e0 = new Date(base.getTime()); e0.setMinutes(minutesOf(d.end));
+        items.forEach(function (it) {
+          if (it.allDay) return;
+          if (it.start < e0 && it.end > s0) {
+            hits.push((it.fromPrev ? '' : hm(it.start)) + '–' + (it.toNext ? '' : hm(it.end)) + ' ' + it.title);
+            if (it.li) it.li.classList.add('is-conflict');
+          }
+        });
+      }
+      r.row.classList.toggle('has-conflict', hits.length > 0);
+      r.conflict.hidden = !hits.length;
+      r.conflict.textContent = hits.length ? '予定と重なっています：' + hits.join('、') : '';
+      if (hits.length) conflictDays.push(DAY_NAMES[i]);
+    });
+    var note = $('conflictNote');
+    if (note) note.textContent = conflictDays.length ? conflictDays.join('・') + '曜が予定と重なっています' : '';
   }
 
   // 「送信」：OS の共有画面を開く。共有画面が使えないブラウザではクリップボードにコピーする

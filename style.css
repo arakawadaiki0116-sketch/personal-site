@@ -14,6 +14,8 @@
   --sun: #b3261e;
   --sat: #1f5f8b;
   --off-bg: #f1efea;
+  --warn: #a15c00;
+  --warn-soft: #fdf1dc;
   --radius: 10px;
   --gap: 16px;
 }
@@ -33,6 +35,8 @@
     --sun: #f08a80;
     --sat: #7fb2d9;
     --off-bg: #1b1c1e;
+    --warn: #f0b45a;
+    --warn-soft: #3a2c14;
   }
 }
 
@@ -208,6 +212,21 @@ button { cursor: pointer; }
 
 .day-row.off .dow, .day-row.off .date { opacity: 0.55; }
 
+/* 予定と重なっている日 */
+.day-row.has-conflict { background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn); }
+.conflict {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--warn);
+  font-weight: 600;
+}
+.conflict[hidden] { display: none; }
+.agenda-day li.is-conflict .agenda-time,
+.agenda-day li.is-conflict .agenda-title { color: var(--warn); }
+.status.warn { color: var(--warn); font-weight: 600; }
+
 .limit {
   display: flex;
   align-items: center;
@@ -326,10 +345,11 @@ textarea {
   max-width: 560px;
   margin: 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 6px 12px;
 }
-.status { flex: 1; margin: 0; font-size: 0.8125rem; color: var(--ink-2); }
+.status { flex: 1 1 100%; margin: 0; font-size: 0.8125rem; color: var(--ink-2); } /* 送信ボタンの上に1行で出す */
 .status:empty { display: none; }
 button.primary {
   flex: 1 1 auto;
