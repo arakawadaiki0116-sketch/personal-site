@@ -220,8 +220,24 @@ button { cursor: pointer; }
 .limit-input { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
 .limit select { width: 64px; text-align: center; }
 
-/* ---- 予定（2日分ほどの高さで、中だけスクロール） ---- */
+.limit + .limit { margin-top: 8px; }
+
+/* ---- 予定（2日分ほどの高さで、中だけスクロール。画面を下げても上に残る） ---- */
 #calendarSection[hidden] { display: none; }
+#calendarSection {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-left: -16px;
+  margin-right: -16px;
+  padding: 8px 16px 10px;
+  background: var(--bg);
+}
+#calendarSection.is-stuck {
+  padding-top: calc(8px + env(safe-area-inset-top));
+  box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.25);
+}
+#calendarSection.is-stuck h2 { display: none; } /* 固定中は見出しを畳んで、予定を広く見せる */
 .cal-body {
   position: relative; /* 曜日の見出しの位置を、この箱の中で測るため */
   max-height: 196px;

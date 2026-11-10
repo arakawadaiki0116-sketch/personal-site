@@ -14,6 +14,7 @@
     var starts = ['13:00', '12:00', '16:00', '13:00', '19:00', '19:00', '13:00'];
     return {
       limit: 5,
+      hours: 6,
       days: DAY_NAMES.map(function (_, i) {
         return { off: i === 6, start: starts[i], end: '22:00' };
       })
@@ -48,6 +49,8 @@
       var saved = JSON.parse(raw);
       var lim = parseInt(saved.limit, 10);
       if (lim >= 1 && lim <= 7) s.limit = lim;
+      var hrs = parseInt(saved.hours, 10);
+      if (hrs >= 1 && hrs <= 12) s.hours = hrs;
       if (Array.isArray(saved.days)) {
         saved.days.slice(0, 7).forEach(function (d, i) {
           if (!d) return;
@@ -66,7 +69,7 @@
   }
   function writeLocal(updatedAt) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ limit: state.limit, days: state.days }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ limit: state.limit, hours: state.hours, days: state.days }));
       localStorage.setItem(UPDATED_KEY, String(updatedAt));
     } catch (e) { /* 保存不可でも動作は続ける */ }
   }
@@ -94,6 +97,8 @@
         end: TIME_LABELS.indexOf(r.end) >= 0 ? r.end : d.end
       };
     });
+    var hrs = parseInt(data && data.hours, 10);
+    state.hours = hrs >= 1 && hrs <= 12 ? hrs : state.hours;
     state.limit = fresh.limit;
     state.days = fresh.days;
     rows.forEach(function (r, i) {
@@ -103,6 +108,7 @@
       applyOff(i);
     });
     $('limit').value = String(state.limit);
+    $('hours').value = String(state.hours);
     writeLocal(updatedAt);
     updatePreview();
   }
@@ -265,6 +271,16 @@
   limitEl.value = String(state.limit);
   limitEl.addEventListener('change', function () { state.limit = parseInt(limitEl.value, 10); save(); });
 
+  // ---- 一日の勤務時間の上限 ----
+  var hoursEl = $('hours');
+  for (var h = 1; h <= 12; h++) {
+    var oh = document.createElement('option');
+    oh.value = oh.textContent = String(h);
+    hoursEl.appendChild(oh);
+  }
+  hoursEl.value = String(state.hours);
+  hoursEl.addEventListener('change', function () { state.hours = parseInt(hoursEl.value, 10); save(); });
+
   // ---- 見出しの期間 ----
   function mdw(d) { return md(d) + '(' + DAY_NAMES[d.getDay()] + ')'; }
   $('weekStart').textContent = mdw(weekStart);
@@ -370,7 +386,7 @@
     pushTimer = setTimeout(pushState, 800);
   }
   function pushState() {
-    var body = JSON.stringify({ data: { limit: state.limit, days: state.days }, updatedAt: readUpdatedAt() });
+    var body = JSON.stringify({ data: { limit: state.limit, hours: state.hours, days: state.days }, updatedAt: readUpdatedAt() });
     api('/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body })
       .then(function (r) {
         if (r.status === 409) return r.json().then(function (cur) { applyRemote(cur.data, cur.updatedAt); });
@@ -518,10 +534,33 @@
     if (!g) return;
     calBody.scrollTo({ top: g.offsetTop, behavior: 'smooth' });
   }
+  var followDay = -1;
   rows.forEach(function (r, i) {
-    r.row.addEventListener('pointerdown', function () { scrollAgendaTo(i); });
-    r.row.addEventListener('focusin', function () { scrollAgendaTo(i); });
+    r.row.addEventListener('pointerdown', function () { followDay = i; scrollAgendaTo(i); });
+    r.row.addEventListener('focusin', function () { followDay = i; scrollAgendaTo(i); });
   });
+
+  // 画面を下げると予定は上に残る（CSS の sticky）。そのとき、すぐ下に見えている曜日まで予定を送る
+  var scrollTicking = false;
+  function onPageScroll() {
+    scrollTicking = false;
+    var secTop = calSection.getBoundingClientRect().top;
+    var stuck = !calSection.hidden && secTop <= 0 && window.scrollY > 0;
+    calSection.classList.toggle('is-stuck', stuck);
+    var bottom = calSection.hidden ? 0 : calSection.getBoundingClientRect().bottom;
+    document.documentElement.style.scrollPaddingTop = bottom + 'px'; // 選んだ行が予定の下に隠れないように
+    if (!stuck) return;
+    for (var i = 0; i < rows.length; i++) {
+      var rect = rows[i].row.getBoundingClientRect();
+      if (rect.bottom > bottom + rect.height * 0.4) {
+        if (i !== followDay) { followDay = i; scrollAgendaTo(i); }
+        return;
+      }
+    }
+  }
+  window.addEventListener('scroll', function () {
+    if (!scrollTicking) { scrollTicking = true; setTimeout(onPageScroll, 60); }
+  }, { passive: true });
 
   // 一番下の設定：ログインの状態とログアウト
   function renderSettings() {
@@ -562,7 +601,7 @@
       lines.push(d.off ? head + '不可' : head + d.start + 'から' + d.end);
     });
     lines.push('');
-    lines.push('一日の勤務時間は6時間以下。一週間の勤務回数は' + state.limit + '回以下でお願いします。');
+    lines.push('一日の勤務時間は' + state.hours + '時間以下。一週間の勤務回数は' + state.limit + '回以下でお願いします。');
     return lines.join('\n');
   }
 
