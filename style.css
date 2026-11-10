@@ -220,22 +220,63 @@ button { cursor: pointer; }
 .limit-input { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
 .limit select { width: 64px; text-align: center; }
 
-/* ---- カレンダー（2日分ほどの高さ） ---- */
+/* ---- 予定（2日分ほどの高さで、中だけスクロール） ---- */
 #calendarSection[hidden] { display: none; }
-#calendar {
-  display: block;
-  width: 100%;
-  height: 210px;
+.cal-body {
+  position: relative; /* 曜日の見出しの位置を、この箱の中で測るため */
+  max-height: 196px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fff;
+}
+.agenda-day + .agenda-day { border-top: 1px solid var(--line); }
+.agenda-date {
+  position: sticky; top: 0;
+  padding: 6px 14px 2px;
+  background: var(--surface);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.agenda-date.sun { color: var(--sun); }
+.agenda-date.sat { color: var(--sat); }
+.agenda-day ul { list-style: none; margin: 0; padding: 0 14px 8px; }
+.agenda-day li {
+  display: grid;
+  grid-template-columns: 7.2em 8px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 0.9375rem;
+}
+.agenda-time { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.agenda-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.agenda-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-day li.agenda-none { display: block; color: var(--ink-3); font-size: 0.875rem; }
+.cal-connect { padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.cal-connect p, .cal-loading { margin: 0; color: var(--ink-2); font-size: 0.875rem; }
+.cal-loading { padding: 16px; }
+button.secondary {
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+}
+button.link {
+  border: 0; background: none; padding: 4px 0;
+  color: var(--ink-2); text-decoration: underline; font-size: 0.8125rem;
+  align-self: flex-start;
 }
 
 /* ---- 設定（一番下に小さく） ---- */
 .settings { margin-top: 36px; font-size: 0.8125rem; color: var(--ink-3); }
 .settings summary { cursor: pointer; padding: 6px 2px; width: max-content; }
 .field { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; color: var(--ink-2); }
-.field input { width: 100%; color: var(--ink); }
+.field p { margin: 0; }
 
 /* ---- メッセージ ---- */
 textarea {

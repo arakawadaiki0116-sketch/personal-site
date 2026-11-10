@@ -14,7 +14,6 @@
     var starts = ['13:00', '12:00', '16:00', '13:00', '19:00', '19:00', '13:00'];
     return {
       limit: 5,
-      calendarId: '',
       days: DAY_NAMES.map(function (_, i) {
         return { off: i === 6, start: starts[i], end: '22:00' };
       })
@@ -47,7 +46,6 @@
       var raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return s;
       var saved = JSON.parse(raw);
-      if (typeof saved.calendarId === 'string') s.calendarId = saved.calendarId.trim();
       var lim = parseInt(saved.limit, 10);
       if (lim >= 1 && lim <= 7) s.limit = lim;
       if (Array.isArray(saved.days)) {
@@ -225,39 +223,259 @@
   $('weekStart').textContent = mdw(weekStart);
   $('weekEnd').textContent = mdw(addDays(weekStart, 6));
 
-  // ---- Googleカレンダー（埋め込み表示。ログイン中のブラウザなら自分の予定が出る） ----
-  var calendarEl = $('calendar');
-  var calendarIdEl = $('calendarId');
-  var lastCalendarUrl = '';
+  // ---- Googleカレンダー連携 ----
+  // ブラウザだけで Google にログインし（OAuth の implicit フロー）、来週の予定を読み取って一覧にする。
+  // 読み取り専用。受け取った鍵（アクセストークン）は1時間で切れ、このブラウザの中にだけ置く。
+  var GOOGLE_CLIENT_ID = ''; // Google Cloud で作った「OAuth クライアントID」（公開してよい値）
+  var SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+  var TOKEN_KEY = 'shiftMemo.gtoken';
+  var OAUTH_STATE_KEY = 'shiftMemo.oauthState';
+  var API = 'https://www.googleapis.com/calendar/v3';
 
-  function compact(d) { return toISO(d).replace(/-/g, ''); }
+  var calSection = $('calendarSection');
+  var calBody = $('calendarBody');
+  var calStatus = $('calendarStatus');
+  var dayGroups = []; // 曜日ごとの見出し要素（スクロール先）
 
-  function renderCalendar() {
-    var id = state.calendarId;
-    $('calendarSection').hidden = !id;
-    if (!id) return;
-    var params = [
-      'src=' + encodeURIComponent(id),
-      'ctz=Asia%2FTokyo',
-      'hl=ja',
-      'mode=AGENDA',
-      'wkst=1',
-      'dates=' + compact(weekStart) + '%2F' + compact(addDays(weekStart, 7)),
-      'showTitle=0', 'showPrint=0', 'showCalendars=0', 'showTz=0', 'showTabs=0'
-    ];
-    var url = 'https://calendar.google.com/calendar/embed?' + params.join('&');
-    if (url !== lastCalendarUrl) {
-      lastCalendarUrl = url;
-      calendarEl.src = url;
+  function redirectUri() {
+    return location.origin + location.pathname.replace(/index\.html$/, '');
+  }
+  function readToken() {
+    try {
+      var t = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null');
+      if (t && t.token && t.exp > Date.now()) return t.token;
+    } catch (e) { /* 無視 */ }
+    return null;
+  }
+  function clearToken() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* 無視 */ }
+  }
+
+  // Google から戻ってきたとき：URL の # 以降から鍵を取り出す
+  function takeTokenFromUrl() {
+    if (!location.hash || location.hash.length < 2) return null;
+    var p = new URLSearchParams(location.hash.slice(1));
+    if (!p.get('access_token') && !p.get('error')) return null;
+    var expected = null;
+    try { expected = localStorage.getItem(OAUTH_STATE_KEY); localStorage.removeItem(OAUTH_STATE_KEY); } catch (e) { /* 無視 */ }
+    history.replaceState(null, '', location.pathname + location.search); // 鍵を URL に残さない
+    if (p.get('error')) return { error: p.get('error') === 'access_denied' ? '連携がキャンセルされました。' : 'Google との連携に失敗しました。' };
+    if (!expected || p.get('state') !== expected) return { error: '連携の確認に失敗しました。もう一度読み込んでください。' };
+    var sec = parseInt(p.get('expires_in'), 10) || 3600;
+    try {
+      localStorage.setItem(TOKEN_KEY, JSON.stringify({ token: p.get('access_token'), exp: Date.now() + (sec - 60) * 1000 }));
+    } catch (e) { /* 無視 */ }
+    return { ok: true };
+  }
+
+  function connectGoogle() {
+    var bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    var st = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    try { localStorage.setItem(OAUTH_STATE_KEY, st); } catch (e) { /* 無視 */ }
+    var q = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: redirectUri(),
+      response_type: 'token',
+      scope: SCOPE,
+      state: st,
+      include_granted_scopes: 'true'
+    });
+    location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + q.toString();
+  }
+
+  function api(path, token) {
+    return fetch(API + path, { headers: { Authorization: 'Bearer ' + token } }).then(function (r) {
+      if (r.status === 401) { var e = new Error('auth'); e.auth = true; throw e; }
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    });
+  }
+
+  // 表示しているカレンダーをすべて読み、来週の予定を集める
+  function fetchWeekEvents(token) {
+    var timeMin = weekStart.toISOString();
+    var timeMax = addDays(weekStart, 7).toISOString();
+    return api('/users/me/calendarList?minAccessRole=reader&fields=items(id,backgroundColor,selected,hidden)', token)
+      .then(function (list) {
+        var cals = (list.items || []).filter(function (c) { return c.selected && !c.hidden; });
+        return Promise.all(cals.map(function (c) {
+          var q = new URLSearchParams({
+            timeMin: timeMin, timeMax: timeMax, singleEvents: 'true', orderBy: 'startTime', maxResults: '250',
+            fields: 'items(summary,start,end,status)'
+          });
+          return api('/calendars/' + encodeURIComponent(c.id) + '/events?' + q.toString(), token)
+            .then(function (res) {
+              return (res.items || []).filter(function (ev) { return ev.status !== 'cancelled'; })
+                .map(function (ev) { ev.color = c.backgroundColor; return ev; });
+            })
+            .catch(function (e) { if (e.auth) throw e; return []; }); // 読めないカレンダーは飛ばす
+        }));
+      })
+      .then(function (arrays) { return [].concat.apply([], arrays); });
+  }
+
+  // 予定を曜日ごとに振り分ける（日をまたぐ予定はその日の分だけ切り出す）
+  function eventsByDay(events) {
+    var days = DAY_NAMES.map(function () { return []; });
+    events.forEach(function (ev) {
+      var allDay = !!(ev.start && ev.start.date);
+      var s = allDay ? parseDateOnly(ev.start.date) : new Date(ev.start.dateTime);
+      var e = allDay ? parseDateOnly(ev.end.date) : new Date(ev.end.dateTime);
+      for (var i = 0; i < 7; i++) {
+        var d0 = addDays(weekStart, i), d1 = addDays(weekStart, i + 1);
+        if (s < d1 && e > d0) {
+          days[i].push({
+            title: ev.summary || '（タイトルなし）',
+            color: ev.color,
+            allDay: allDay || (s <= d0 && e >= d1),
+            start: s < d0 ? d0 : s,
+            end: e > d1 ? d1 : e,
+            fromPrev: s < d0,
+            toNext: e > d1
+          });
+        }
+      }
+    });
+    days.forEach(function (list) {
+      list.sort(function (a, b) { return (b.allDay - a.allDay) || (a.start - b.start); });
+    });
+    return days;
+  }
+  function parseDateOnly(str) {
+    var p = str.split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2]);
+  }
+  function hm(d) { return d.getHours() + ':' + pad2(d.getMinutes()); }
+
+  function renderEvents(days) {
+    calBody.textContent = '';
+    dayGroups = [];
+    var list = document.createElement('div');
+    list.className = 'agenda';
+    days.forEach(function (items, i) {
+      var date = addDays(weekStart, i);
+      var group = document.createElement('div');
+      group.className = 'agenda-day';
+      var head = document.createElement('div');
+      head.className = 'agenda-date' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '');
+      head.textContent = md(date) + '(' + DAY_NAMES[i] + ')';
+      group.appendChild(head);
+      var ul = document.createElement('ul');
+      if (!items.length) {
+        var none = document.createElement('li');
+        none.className = 'agenda-none';
+        none.textContent = '予定なし';
+        ul.appendChild(none);
+      }
+      items.forEach(function (it) {
+        var li = document.createElement('li');
+        var time = document.createElement('span');
+        time.className = 'agenda-time';
+        time.textContent = it.allDay ? '終日' : (it.fromPrev ? '' : hm(it.start)) + '–' + (it.toNext ? '' : hm(it.end));
+        var dot = document.createElement('span');
+        dot.className = 'agenda-dot';
+        if (it.color) dot.style.background = it.color;
+        var title = document.createElement('span');
+        title.className = 'agenda-title';
+        title.textContent = it.title;
+        li.appendChild(time);
+        li.appendChild(dot);
+        li.appendChild(title);
+        ul.appendChild(li);
+      });
+      group.appendChild(ul);
+      list.appendChild(group);
+      dayGroups.push(group);
+    });
+    calBody.appendChild(list);
+  }
+
+  function showConnect(message) {
+    calBody.textContent = '';
+    var box = document.createElement('div');
+    box.className = 'cal-connect';
+    if (message) {
+      var p = document.createElement('p');
+      p.textContent = message;
+      box.appendChild(p);
+    }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'secondary';
+    btn.textContent = 'Googleカレンダーの予定を読み込む';
+    btn.addEventListener('click', connectGoogle);
+    box.appendChild(btn);
+    calBody.appendChild(box);
+  }
+
+  function loadCalendar() {
+    var token = readToken();
+    if (!token) { showConnect(); renderSettings(); return; }
+    calBody.textContent = '';
+    var loading = document.createElement('p');
+    loading.className = 'cal-loading';
+    loading.textContent = '予定を読み込んでいます…';
+    calBody.appendChild(loading);
+    fetchWeekEvents(token)
+      .then(function (events) { renderEvents(eventsByDay(events)); renderSettings(); })
+      .catch(function (e) {
+        if (e.auth) { clearToken(); showConnect('連携の期限が切れました。もう一度読み込んでください。'); }
+        else showConnect('予定を読み込めませんでした。通信を確かめて、もう一度試してください。');
+        renderSettings();
+      });
+  }
+
+  // 曜日の行を触ったら、上の予定をその日まで送る
+  function scrollAgendaTo(i) {
+    var g = dayGroups[i];
+    if (!g) return;
+    calBody.scrollTo({ top: g.offsetTop, behavior: 'smooth' });
+  }
+  rows.forEach(function (r, i) {
+    r.row.addEventListener('pointerdown', function () { scrollAgendaTo(i); });
+    r.row.addEventListener('focusin', function () { scrollAgendaTo(i); });
+  });
+
+  // 一番下の設定：連携の状態と解除
+  function renderSettings() {
+    var box = $('calendarSettingsBody');
+    box.textContent = '';
+    var p = document.createElement('p');
+    if (!GOOGLE_CLIENT_ID) {
+      p.textContent = 'Googleカレンダー連携は準備中です（クライアントIDが未設定）。';
+      box.appendChild(p);
+      return;
+    }
+    var token = readToken();
+    p.textContent = token ? 'Googleカレンダーと連携中（読み取りのみ）。1時間たつと、もう一度読み込みが必要です。'
+                          : 'Googleカレンダーとは、まだ連携していません。';
+    box.appendChild(p);
+    if (token) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'link';
+      btn.textContent = '連携を解除する';
+      btn.addEventListener('click', function () {
+        var t = readToken();
+        clearToken();
+        if (t) {
+          fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(t), { method: 'POST', mode: 'no-cors' }).catch(function () {});
+        }
+        showConnect('連携を解除しました。');
+        renderSettings();
+      });
+      box.appendChild(btn);
     }
   }
 
-  calendarIdEl.value = state.calendarId;
-  calendarIdEl.addEventListener('change', function () {
-    state.calendarId = calendarIdEl.value.trim();
-    renderCalendar();
-    save();
-  });
+  function initCalendar() {
+    if (!GOOGLE_CLIENT_ID) { calSection.hidden = true; renderSettings(); return; }
+    calSection.hidden = false;
+    var back = takeTokenFromUrl();
+    if (back && back.error) { showConnect(back.error); renderSettings(); return; }
+    loadCalendar();
+  }
 
   // ---- メッセージ ----
   function buildText() {
@@ -310,6 +528,6 @@
     }
   });
 
-  renderCalendar();
+  initCalendar();
   save();
 })();
