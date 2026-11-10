@@ -1,0 +1,12 @@
+{
+  "name": "shift-calendar",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/expand.test.js",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "ical.js": "2.2.1"
+  }
+}

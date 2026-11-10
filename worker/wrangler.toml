@@ -1,0 +1,13 @@
+# シフト希望メモ用：Googleカレンダーの「iCal形式の非公開URL」を読み、来週の予定を返す中継役
+name = "shift-calendar"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[vars]
+# 予定を読みに来てよいページ（CORS）
+ALLOWED_ORIGINS = "https://arakawadaiki0116-sketch.github.io"
+
+# 秘密の値（コードには書かない。wrangler secret put で入れる）
+#   ACCESS_KEY : ページと共有する合言葉
+#   ICS_URLS   : iCal 形式の非公開URL（複数なら空白か改行で区切る）

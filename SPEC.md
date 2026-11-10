@@ -71,3 +71,8 @@
 - 曜日の行を触ると、予定の一覧をその日まで送る
 - OAuth クライアントIDは app.js に書く（秘密の値ではない）。リダイレクト先は GitHub Pages の URL
 
+## v1.5 の変更（利用者の指示）
+- v1.4 の Google ログイン（1時間で許可が切れる）はやめ、Cloudflare Workers の中継役が「iCal形式の非公開URL」を読んで来週の予定を返す形にした。ページは合言葉（X-Key ヘッダー）を付けて取りに行くだけで、ログインは要らない
+- 非公開URLと合言葉は Worker の秘密の設定にだけ置く。CORS は GitHub Pages の URL だけ許可
+- 繰り返し予定（RRULE・EXDATE・1回だけの変更）も展開する（ical.js を Worker 側でだけ使う。ページは外部ライブラリなしのまま）
+

@@ -1,0 +1,72 @@
+// expand.js の確認（node test/expand.test.js）
+import assert from 'node:assert/strict';
+import { expandIcs } from '../src/expand.js';
+
+const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+BEGIN:VTIMEZONE
+TZID:Asia/Tokyo
+X-LIC-LOCATION:Asia/Tokyo
+BEGIN:STANDARD
+TZOFFSETFROM:+0900
+TZOFFSETTO:+0900
+TZNAME:GMT+9
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:class-1
+SUMMARY:大学 講義
+DTSTART;TZID=Asia/Tokyo:20261005T090000
+DTEND;TZID=Asia/Tokyo:20261005T121000
+RRULE:FREQ=WEEKLY;BYDAY=MO,WE
+EXDATE;TZID=Asia/Tokyo:20261118T090000
+END:VEVENT
+BEGIN:VEVENT
+UID:class-1
+RECURRENCE-ID;TZID=Asia/Tokyo:20261116T090000
+SUMMARY:大学 講義（教室変更）
+DTSTART;TZID=Asia/Tokyo:20261116T100000
+DTEND;TZID=Asia/Tokyo:20261116T130000
+END:VEVENT
+BEGIN:VEVENT
+UID:dentist
+SUMMARY:歯医者
+DTSTART:20261117T063000Z
+DTEND:20261117T073000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:trip
+SUMMARY:旅行
+DTSTART;VALUE=DATE:20261120
+DTEND;VALUE=DATE:20261122
+END:VEVENT
+BEGIN:VEVENT
+UID:old
+SUMMARY:先週の予定
+DTSTART:20261110T010000Z
+DTEND:20261110T020000Z
+END:VEVENT
+BEGIN:VEVENT
+UID:cancel
+SUMMARY:中止
+STATUS:CANCELLED
+DTSTART:20261119T010000Z
+DTEND:20261119T020000Z
+END:VEVENT
+END:VCALENDAR`.replace(/\n/g, '\r\n');
+
+const from = Date.UTC(2026, 10, 15) - 9 * 3600e3; // 2026-11-15 0:00 JST
+const to = from + 7 * 86400e3;
+const ev = expandIcs(ics, from, to);
+const show = ev.map((e) => `${e.summary} ${e.start.dateTime || e.start.date} ${e.end.dateTime || e.end.date}`);
+console.log(show.join('\n'));
+
+assert.deepEqual(show, [
+  '大学 講義（教室変更） 2026-11-16T01:00:00.000Z 2026-11-16T04:00:00.000Z', // 1回だけ変更した回（JST 10:00–13:00）
+  '歯医者 2026-11-17T06:30:00.000Z 2026-11-17T07:30:00.000Z',
+  // 11/18(水) の講義は EXDATE で除外
+  '旅行 2026-11-20 2026-11-22'
+]);
+console.log('ok');
