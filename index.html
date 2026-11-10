@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>シフト希望メモ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>シフト希望メモ</h1>
+
+    <section class="card">
+      <h2>対象週</h2>
+      <div class="week-controls">
+        <button type="button" id="thisWeek">今週</button>
+        <button type="button" id="nextWeek">来週</button>
+        <input type="date" id="datePicker" aria-label="日付を選んで週を指定">
+      </div>
+      <p class="week-label"><span id="weekStart"></span> 以降の週（日曜始まり）</p>
+    </section>
+
+    <section class="card">
+      <h2>曜日ごとの希望</h2>
+      <div id="days"></div>
+    </section>
+
+    <section class="card">
+      <label class="limit">
+        一週間の勤務回数の上限
+        <select id="limit"></select>
+        回
+      </label>
+    </section>
+
+    <section class="card">
+      <button type="button" id="generate" class="primary">文面を作る</button>
+      <textarea id="preview" rows="12" readonly placeholder="「文面を作る」を押すとここに表示されます"></textarea>
+      <div class="copy-row">
+        <button type="button" id="copy">コピー</button>
+        <span id="copyStatus" role="status"></span>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

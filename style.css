@@ -1,0 +1,126 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  background: #f4f5f7;
+  color: #222;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 { font-size: 1.4rem; margin: 8px 0 16px; }
+h2 { font-size: 1.05rem; margin: 0 0 12px; }
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+button, select, input[type="date"] {
+  font: inherit;
+  font-size: 1rem;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid #c8ccd2;
+  background: #fff;
+  color: inherit;
+  padding: 0 12px;
+}
+
+button { cursor: pointer; background: #eef1f5; }
+button:active { background: #dde2e9; }
+
+button.primary {
+  width: 100%;
+  background: #0a7d3c;
+  border-color: #0a7d3c;
+  color: #fff;
+  font-weight: bold;
+}
+button.primary:active { background: #086431; }
+
+select:disabled { background: #eceef1; color: #999; }
+
+.week-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.week-controls button { flex: 1 1 80px; }
+.week-controls input { flex: 2 1 160px; }
+
+.week-label { margin: 12px 0 0; font-size: 1.05rem; }
+#weekStart { font-weight: bold; font-size: 1.2rem; }
+
+.day-row {
+  display: grid;
+  grid-template-columns: 5.5em auto 1fr;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-top: 1px solid #eee;
+}
+.day-row:first-child { border-top: none; }
+.day-row.off .times { opacity: 0.5; }
+
+.day-name { font-weight: bold; }
+.day-name .date { font-weight: normal; color: #666; margin-right: 4px; }
+.day-name.sun { color: #c62828; }
+.day-name.sat { color: #1565c0; }
+
+.off-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.off-label input { width: 22px; height: 22px; margin: 0; }
+
+.times {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.times select { flex: 1; min-width: 0; }
+
+.limit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+textarea {
+  width: 100%;
+  margin-top: 12px;
+  font: inherit;
+  font-size: 1rem;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #c8ccd2;
+  resize: vertical;
+}
+
+.copy-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.copy-row button { min-width: 120px; }
+#copyStatus { color: #0a7d3c; }
+
+@media (max-width: 420px) {
+  .day-row { grid-template-columns: 1fr auto; }
+  .times { grid-column: 1 / -1; }
+}
