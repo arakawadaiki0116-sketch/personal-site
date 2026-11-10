@@ -8,7 +8,7 @@ workers_dev = true
 # 予定や入力内容を読みに来てよいページ（CORS）
 ALLOWED_ORIGINS = "https://arakawadaiki0116-sketch.github.io"
 # Google Cloud で作った OAuth クライアントID（公開してよい値。空のあいだはログインできない）
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "655664054784-rsts4f6d3kjemjm805uh6p4uiqun3fdh.apps.googleusercontent.com"
 
 # 入力内容の保存場所（端末どうしで共有）
 [[kv_namespaces]]
