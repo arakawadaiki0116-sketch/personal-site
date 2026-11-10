@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test/expand.test.js",
+    "test": "node test/expand.test.js && node test/auth.test.js",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

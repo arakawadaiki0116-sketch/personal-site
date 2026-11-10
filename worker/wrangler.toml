@@ -1,13 +1,21 @@
-# シフト希望メモ用：Googleカレンダーの「iCal形式の非公開URL」を読み、来週の予定を返す中継役
+# シフト希望メモ用の中継役：Google ログインの確認・来週の予定・入力内容の保存
 name = "shift-calendar"
 main = "src/index.js"
 compatibility_date = "2026-11-01"
 workers_dev = true
 
 [vars]
-# 予定を読みに来てよいページ（CORS）
+# 予定や入力内容を読みに来てよいページ（CORS）
 ALLOWED_ORIGINS = "https://arakawadaiki0116-sketch.github.io"
+# Google Cloud で作った OAuth クライアントID（公開してよい値。空のあいだはログインできない）
+GOOGLE_CLIENT_ID = ""
+
+# 入力内容の保存場所（端末どうしで共有）
+[[kv_namespaces]]
+binding = "STATE"
+id = "c4681abda0644728a95a49945a366a1b"
 
 # 秘密の値（コードには書かない。wrangler secret put で入れる）
-#   ACCESS_KEY : ページと共有する合言葉
-#   ICS_URLS   : iCal 形式の非公開URL（複数なら空白か改行で区切る）
+#   ALLOWED_EMAIL  : ログインを許すメールアドレス
+#   SESSION_SECRET : 通行証の署名に使う鍵（変えると全端末がログアウト）
+#   ICS_URLS       : Googleカレンダーの「iCal形式の非公開URL」（複数なら空白区切り）

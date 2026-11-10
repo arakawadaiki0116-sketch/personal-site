@@ -60,13 +60,52 @@
     return s;
   }
 
-  // 入力が変わるたびに呼ぶ：保存して、メッセージを作り直す
+  var UPDATED_KEY = 'shiftMemo.updatedAt';
+  function readUpdatedAt() {
+    try { return parseInt(localStorage.getItem(UPDATED_KEY), 10) || 0; } catch (e) { return 0; }
+  }
+  function writeLocal(updatedAt) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ limit: state.limit, days: state.days }));
+      localStorage.setItem(UPDATED_KEY, String(updatedAt));
+    } catch (e) { /* 保存不可でも動作は続ける */ }
+  }
+
+  // 入力が変わるたびに呼ぶ：このブラウザに保存し、ログイン中ならほかの端末とも共有する
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* 保存不可でも動作は続ける */ }
+    writeLocal(Date.now());
     updatePreview();
+    schedulePush();
   }
 
   var state = load();
+
+  // ほかの端末で入れた内容を画面に反映する
+  function applyRemote(data, updatedAt) {
+    var fresh = defaultState();
+    var lim = parseInt(data && data.limit, 10);
+    fresh.limit = lim >= 1 && lim <= 7 ? lim : state.limit;
+    fresh.days = state.days.map(function (d, i) {
+      var r = data && Array.isArray(data.days) ? data.days[i] : null;
+      if (!r) return d;
+      return {
+        off: !!r.off,
+        start: TIME_LABELS.indexOf(r.start) >= 0 ? r.start : d.start,
+        end: TIME_LABELS.indexOf(r.end) >= 0 ? r.end : d.end
+      };
+    });
+    state.limit = fresh.limit;
+    state.days = fresh.days;
+    rows.forEach(function (r, i) {
+      r.start.setValue(state.days[i].start);
+      r.end.setValue(state.days[i].end);
+      r.off.checked = state.days[i].off;
+      applyOff(i);
+    });
+    $('limit').value = String(state.limit);
+    writeLocal(updatedAt);
+    updatePreview();
+  }
 
   // ブラウザが保存内容を勝手に消さないよう頼む（対応ブラウザのみ）
   if (navigator.storage && navigator.storage.persist) {
@@ -138,6 +177,14 @@
       el: wrap,
       // 画面に置いたあとで呼ぶ（置く前は位置を合わせられない）
       place: function () { scroller.scrollTop = index * ITEM_H; },
+      // ほかの端末の内容を反映するとき（onChange は呼ばない）
+      setValue: function (v) {
+        var idx = TIME_LABELS.indexOf(v);
+        if (idx < 0) return;
+        index = idx;
+        mark(idx);
+        scroller.scrollTop = idx * ITEM_H;
+      },
       setDisabled: function (dis) {
         wrap.classList.toggle('is-disabled', dis);
         scroller.tabIndex = dis ? -1 : 0;
@@ -195,7 +242,7 @@
     row.appendChild(offLabel);
     daysEl.appendChild(row);
 
-    rows.push({ row: row, start: start, end: end });
+    rows.push({ row: row, start: start, end: end, off: off });
     start.place();
     end.place();
     applyOff(i);
@@ -223,35 +270,124 @@
   $('weekStart').textContent = mdw(weekStart);
   $('weekEnd').textContent = mdw(addDays(weekStart, 6));
 
-  // ---- Googleカレンダー連携 ----
-  // Cloudflare の中継役（worker/）が Google カレンダーの「iCal形式の非公開URL」を読み、来週の予定を返す。
-  // ページ側は合言葉を付けて取りに行くだけ。Google へのログインは要らない。
-  var CALENDAR_API = 'https://shift-calendar.arakawadaiki0116.workers.dev/events';
-  var KEY_STORE = 'shiftMemo.calKey';
+  // ---- ログイン・予定・入力の共有 ----
+  // Cloudflare の中継役（worker/）が、Google ログインの確認、来週の予定、入力内容の保存を受け持つ。
+  // ログインは arakawadaiki0116@gmail.com だけが通る（許可するアドレスは中継役の秘密の設定にある）。
+  var API = 'https://shift-calendar.arakawadaiki0116.workers.dev';
+  var SESSION_KEY = 'shiftMemo.session';
+  var OAUTH_KEY = 'shiftMemo.oauth';
 
   var calSection = $('calendarSection');
   var calBody = $('calendarBody');
   var dayGroups = []; // 曜日ごとの見出し要素（スクロール先）
 
-  function readKey() {
-    try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; }
+  try { localStorage.removeItem('shiftMemo.calKey'); } catch (e) { /* 前の合言葉は使わない */ }
+
+  function readSession() {
+    try {
+      var s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      if (s && s.token && s.exp * 1000 > Date.now()) return s;
+    } catch (e) { /* 無視 */ }
+    return null;
   }
-  function writeKey(k) {
-    try { k ? localStorage.setItem(KEY_STORE, k) : localStorage.removeItem(KEY_STORE); } catch (e) { /* 無視 */ }
+  function writeSession(s) {
+    try { s ? localStorage.setItem(SESSION_KEY, JSON.stringify(s)) : localStorage.removeItem(SESSION_KEY); } catch (e) { /* 無視 */ }
+  }
+  function sessionEmail(s) {
+    try {
+      var body = s.token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(body + '==='.slice((body.length + 3) % 4))).e || '';
+    } catch (e) { return ''; }
   }
 
-  // 「…/#key=合言葉」のリンクで開いたら合言葉を覚え、URL からは消す
-  function takeKeyFromUrl() {
-    var m = /(?:^#|&)key=([^&]+)/.exec(location.hash || '');
-    if (!m) return;
-    writeKey(decodeURIComponent(m[1]));
-    history.replaceState(null, '', location.pathname + location.search);
+  function api(path, opt) {
+    var s = readSession();
+    opt = opt || {};
+    var headers = opt.headers || {};
+    if (s) headers.Authorization = 'Bearer ' + s.token;
+    return fetch(API + path, { method: opt.method || 'GET', headers: headers, body: opt.body, cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 401) { writeSession(null); showLoggedOut(); var e = new Error('login'); e.login = true; throw e; }
+        return r;
+      });
   }
 
-  function fetchWeekEvents(key) {
-    var url = CALENDAR_API + '?start=' + toISO(weekStart) + '&days=7';
-    return fetch(url, { headers: { 'X-Key': key }, cache: 'no-store' }).then(function (r) {
-      if (r.status === 401) { var e = new Error('key'); e.key = true; throw e; }
+  function randomHex() {
+    var b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  }
+
+  // 「Googleでログイン」：Google のログイン画面へ移る（戻ってきたら finishLogin）
+  function startLogin() {
+    showMessage('Google のログイン画面へ移動しています…');
+    fetch(API + '/config', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (cfg) {
+      if (!cfg.clientId) { showLoggedOut('ログインの準備がまだ終わっていません。'); return; }
+      var st = randomHex(), nonce = randomHex();
+      try { localStorage.setItem(OAUTH_KEY, JSON.stringify({ state: st, nonce: nonce })); } catch (e) { /* 無視 */ }
+      var q = new URLSearchParams({
+        client_id: cfg.clientId,
+        redirect_uri: location.origin + location.pathname.replace(/index\.html$/, ''),
+        response_type: 'id_token',
+        scope: 'openid email',
+        state: st,
+        nonce: nonce,
+        prompt: 'select_account'
+      });
+      location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + q.toString();
+    }).catch(function () { showLoggedOut('通信できませんでした。もう一度試してください。'); });
+  }
+
+  // Google から戻ってきたとき：URL の # 以降の証明書を中継役に渡して、通行証をもらう
+  function finishLogin() {
+    if (!location.hash || location.hash.length < 2) return Promise.resolve(false);
+    var p = new URLSearchParams(location.hash.slice(1));
+    if (!p.get('id_token') && !p.get('error')) return Promise.resolve(false);
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(OAUTH_KEY) || 'null'); localStorage.removeItem(OAUTH_KEY); } catch (e) { /* 無視 */ }
+    history.replaceState(null, '', location.pathname + location.search); // 証明書を URL に残さない
+    if (p.get('error')) { showLoggedOut('ログインがキャンセルされました。'); return Promise.resolve(true); }
+    if (!saved || p.get('state') !== saved.state) { showLoggedOut('ログインの確認に失敗しました。もう一度試してください。'); return Promise.resolve(true); }
+    showMessage('ログインしています…');
+    return fetch(API + '/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: p.get('id_token'), nonce: saved.nonce })
+    }).then(function (r) {
+      return r.json().then(function (data) {
+        if (r.ok && data.session) { writeSession({ token: data.session, exp: data.exp }); return true; }
+        showLoggedOut(data.error === 'not_allowed' ? 'このアカウントでは使えません。' : 'ログインできませんでした。もう一度試してください。');
+        return true;
+      });
+    }).catch(function () { showLoggedOut('通信できませんでした。もう一度試してください。'); return true; });
+  }
+
+  // ---- 入力内容の共有 ----
+  var pushTimer = null;
+  function schedulePush() {
+    if (!readSession()) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushState, 800);
+  }
+  function pushState() {
+    var body = JSON.stringify({ data: { limit: state.limit, days: state.days }, updatedAt: readUpdatedAt() });
+    api('/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function (r) {
+        if (r.status === 409) return r.json().then(function (cur) { applyRemote(cur.data, cur.updatedAt); });
+      })
+      .catch(function () { /* 通信できないときは、次に入力したときに送る */ });
+  }
+  function pullState() {
+    if (!readSession()) return Promise.resolve();
+    return api('/state').then(function (r) { return r.json(); }).then(function (remote) {
+      var local = readUpdatedAt();
+      if (remote && remote.data && remote.updatedAt > local) applyRemote(remote.data, remote.updatedAt);
+      else if (local > ((remote && remote.updatedAt) || 0)) pushState();
+    }).catch(function () { /* 通信できなければ、このブラウザの内容のまま */ });
+  }
+
+  function fetchWeekEvents() {
+    return api('/events?start=' + toISO(weekStart) + '&days=7').then(function (r) {
       if (r.status === 503) { var n = new Error('setup'); n.setup = true; throw n; }
       if (!r.ok) throw new Error('http ' + r.status);
       return r.json();
@@ -342,17 +478,36 @@
     calBody.appendChild(p);
   }
 
-  function loadCalendar() {
-    var key = readKey();
-    calSection.hidden = !key;
+  function showLoggedOut(message) {
+    calSection.hidden = false;
+    calBody.textContent = '';
+    var box = document.createElement('div');
+    box.className = 'cal-connect';
+    if (message) {
+      var p = document.createElement('p');
+      p.textContent = message;
+      box.appendChild(p);
+    }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'secondary';
+    btn.textContent = 'Googleでログイン';
+    btn.addEventListener('click', startLogin);
+    box.appendChild(btn);
+    calBody.appendChild(box);
     renderSettings();
-    if (!key) return;
+  }
+
+  function loadCalendar() {
+    if (!readSession()) { showLoggedOut(); return; }
+    calSection.hidden = false;
+    renderSettings();
     showMessage('予定を読み込んでいます…');
-    fetchWeekEvents(key)
+    fetchWeekEvents()
       .then(function (events) { renderEvents(eventsByDay(events)); })
       .catch(function (e) {
-        if (e.key) showMessage('合言葉が違います。一番下の「カレンダーの設定」で入れ直してください。');
-        else if (e.setup) showMessage('カレンダーの読み込み先がまだ設定されていません。');
+        if (e.login) return; // ログイン画面に戻した
+        if (e.setup) showMessage('カレンダーの読み込み先がまだ設定されていません。');
         else showMessage('予定を読み込めませんでした。通信を確かめて、開き直してください。');
       });
   }
@@ -368,44 +523,34 @@
     r.row.addEventListener('focusin', function () { scrollAgendaTo(i); });
   });
 
-  // 一番下の設定：合言葉の入力と消去
+  // 一番下の設定：ログインの状態とログアウト
   function renderSettings() {
     var box = $('calendarSettingsBody');
     box.textContent = '';
-    var key = readKey();
+    var s = readSession();
     var p = document.createElement('p');
-    p.textContent = key ? 'Googleカレンダーの予定を表示中です。' : '合言葉を入れると、来週の予定が上に出ます。';
+    p.textContent = s ? (sessionEmail(s) || 'Google') + ' でログイン中です。入力内容はほかの端末と共有されます。'
+                      : 'ログインしていません。入力内容はこのブラウザの中だけに保存されます。';
     box.appendChild(p);
-
-    var input = document.createElement('input');
-    input.type = 'password';
-    input.autocomplete = 'off';
-    input.placeholder = key ? '合言葉を変える' : '合言葉';
-    input.setAttribute('aria-label', 'カレンダーの合言葉');
-    input.addEventListener('change', function () {
-      var v = input.value.trim();
-      if (!v) return;
-      writeKey(v);
-      loadCalendar();
-    });
-    box.appendChild(input);
-
-    if (key) {
+    if (s) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'link';
-      btn.textContent = 'このブラウザから合言葉を消す';
-      btn.addEventListener('click', function () { writeKey(''); loadCalendar(); });
+      btn.textContent = 'この端末でログアウト';
+      btn.addEventListener('click', function () { writeSession(null); showLoggedOut(); });
       box.appendChild(btn);
     }
   }
 
-  function initCalendar() {
-    takeKeyFromUrl();
-    loadCalendar();
-    // 開いたままのページで合言葉つきリンクを開き直したとき
-    window.addEventListener('hashchange', function () {
-      if (/key=/.test(location.hash)) { takeKeyFromUrl(); loadCalendar(); }
+  function initAccount() {
+    finishLogin().then(function () {
+      if (!readSession()) { if (!calBody.childNodes.length) showLoggedOut(); else renderSettings(); return; }
+      pullState();
+      loadCalendar();
+    });
+    // ほかの端末で入れたあと、この画面に戻ってきたら取り直す
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') pullState();
     });
   }
 
@@ -460,6 +605,6 @@
     }
   });
 
-  initCalendar();
-  save();
+  updatePreview();
+  initAccount();
 })();
